@@ -1,0 +1,40 @@
+[Unit]
+Description=Laboratory Information System (LIS) Production Service
+Documentation=https://github.com/your-org/lis
+After=network.target postgresql.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=lis
+Group=lis
+WorkingDirectory=/opt/lis
+Environment=PYTHONPATH=/opt/lis
+Environment=ENVIRONMENT=production
+ExecStart=/opt/lis/venv/bin/python lis_service.py
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=5
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=50%
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/lis/logs /opt/lis/data
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lis-service
+
+[Install]
+WantedBy=multi-user.target 

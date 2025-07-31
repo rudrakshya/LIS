@@ -15,6 +15,9 @@ from ..core.exceptions import DeviceException, DeviceConnectionException, Device
 from ..models import Equipment, EquipmentStatus, CommunicationProtocol
 from ..communication.hl7_handler import hl7_handler
 from .analyzer_interface import AnalyzerInterface
+from ..communication.serial_handler import bt1500_manager
+from ..database.session import get_session
+from ..models import EquipmentType
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +199,66 @@ class DeviceManager:
                 statuses.append(status)
         
         return statuses
+    
+    async def add_bt1500_device(self, device_id: str, port: str, baudrate: int = 9600) -> bool:
+        """Add a BT-1500 Sensacore analyzer device"""
+        try:
+            # Add to BT-1500 manager
+            success = await bt1500_manager.add_device(device_id, port, baudrate)
+            
+            if success:
+                # Register with main device manager
+                equipment = Equipment(
+                    equipment_id=device_id,
+                    name=f"BT-1500 Sensacore Analyzer ({device_id})",
+                    manufacturer="Sensacore",
+                    model="BT-1500",
+                    equipment_type=EquipmentType.CHEMISTRY_ANALYZER,
+                    communication_protocol=CommunicationProtocol.SERIAL,
+                    serial_port=port,
+                    baud_rate=baudrate
+                )
+                
+                # Store in database
+                with get_session() as session:
+                    session.add(equipment)
+                    session.commit()
+                
+                logger.info(f"Added BT-1500 device {device_id} on {port}")
+                return True
+            else:
+                logger.error(f"Failed to add BT-1500 device {device_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error adding BT-1500 device {device_id}: {str(e)}")
+            return False
+    
+    async def remove_bt1500_device(self, device_id: str):
+        """Remove a BT-1500 device"""
+        try:
+            # Remove from BT-1500 manager
+            await bt1500_manager.remove_device(device_id)
+            
+            # Remove from database
+            with get_session() as session:
+                equipment = session.query(Equipment).filter_by(equipment_id=device_id).first()
+                if equipment:
+                    session.delete(equipment)
+                    session.commit()
+            
+            logger.info(f"Removed BT-1500 device {device_id}")
+            
+        except Exception as e:
+            logger.error(f"Error removing BT-1500 device {device_id}: {str(e)}")
+    
+    def get_bt1500_devices(self) -> Dict[str, Dict[str, Any]]:
+        """Get status of all BT-1500 devices"""
+        return bt1500_manager.get_all_devices()
+    
+    def get_bt1500_device_status(self, device_id: str) -> Optional[Dict[str, Any]]:
+        """Get status of a specific BT-1500 device"""
+        return bt1500_manager.get_device_status(device_id)
     
     async def _load_equipment(self):
         """Load equipment from database and create device connections"""

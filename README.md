@@ -24,9 +24,10 @@ This LIS system provides a complete solution for laboratory management, includin
 
 ### Communication Protocols
 - ✅ **HL7 v2.x Support** (ORM, ORU, ADT, QRY, ACK messages)
+- ✅ **BT-1500 Sensacore Support** (RS-232/USB serial communication)
 - 🔄 **ASTM Protocol Support** (planned)
 - ✅ **TCP/IP Communication**
-- 🔄 **Serial Port Communication** (planned)
+- ✅ **Serial Port Communication** (RS-232/USB)
 - 🔄 **File-based Transfer** (planned)
 
 ### Integration Features
@@ -300,6 +301,7 @@ python tests/test_hl7_communication.py
 ## 🔧 Equipment Integration
 
 ### Supported Equipment Types
+- **BT-1500 Sensacore Analyzer** (RS-232/USB, 9600 baud, 8N1)
 - Chemistry Analyzers
 - Hematology Analyzers
 - Immunoassay Analyzers
@@ -307,18 +309,64 @@ python tests/test_hl7_communication.py
 - Coagulation Analyzers
 - Urinalysis Analyzers
 
+### BT-1500 Sensacore Analyzer Integration
+The system includes dedicated support for the BT-1500 Sensacore analyzer with the following features:
+
+#### **Serial Communication**
+- **RS-232 Port**: Direct connection via male pin configuration
+- **USB Type-B Port**: USB-to-serial using CP210X driver
+- **Settings**: 9600 baud, 8 data bits, 1 stop bit, no parity
+- **Cable Length**: Up to 5 meters (USB) or 10 meters (RS-232)
+
+#### **Data Processing**
+- **Real-time Data Reception**: Automatic parsing of BT-1500 output
+- **Parameter Support**: Na, K, iCa, Cl, pH measurements
+- **Calibration Data**: Automatic storage of calibration reports and slopes
+- **Result Conversion**: Automatic conversion to HL7 ORU^R01 messages
+- **Quality Control**: Flag detection (HIGH, LOW) and validation
+
+#### **API Management**
+```bash
+# Add BT-1500 device
+curl -X POST "http://localhost:8080/devices/bt1500/" \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "device_id=BT1500_001&port=COM1&baudrate=9600"
+
+# Get device status
+curl "http://localhost:8080/devices/bt1500/BT1500_001"
+
+# Get all BT-1500 devices
+curl "http://localhost:8080/devices/bt1500/"
+
+# Send command to device
+curl -X POST "http://localhost:8080/devices/bt1500/BT1500_001/command" \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "command=STATUS"
+```
+
+#### **Configuration**
+```env
+# BT-1500 Configuration
+BT1500_ENABLED=true
+BT1500_DEFAULT_PORT=COM1
+BT1500_DEFAULT_BAUDRATE=9600
+BT1500_TIMEOUT=30
+BT1500_AUTO_PROCESS_RESULTS=true
+BT1500_CONVERT_TO_HL7=true
+```
+
 ### Adding New Equipment
 1. Define equipment in the database:
 ```python
 equipment = Equipment(
-    equipment_id="CHEM001",
-    name="Chemistry Analyzer XYZ",
-    manufacturer="MedDevice Inc",
-    model="ChemPro-2000",
+    equipment_id="BT1500_001",
+    name="BT-1500 Sensacore Analyzer",
+    manufacturer="Sensacore",
+    model="BT-1500",
     equipment_type=EquipmentType.CHEMISTRY_ANALYZER,
-    communication_protocol=CommunicationProtocol.HL7,
-    ip_address="192.168.1.100",
-    port=5000
+    communication_protocol=CommunicationProtocol.SERIAL,
+    serial_port="COM1",
+    baud_rate=9600
 )
 ```
 

@@ -3,7 +3,7 @@ REST API for Laboratory Information System
 Provides endpoints for external system integration
 """
 
-from fastapi import FastAPI, HTTPException, Depends, status, Query
+from fastapi import FastAPI, HTTPException, Depends, status, Query, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -27,6 +27,7 @@ from .schemas import (
 )
 from ..devices.device_manager import device_manager
 from ..communication.hl7_handler import hl7_handler
+from ..communication.serial_handler import bt1500_manager
 
 logger = logging.getLogger(__name__)
 
@@ -592,6 +593,143 @@ async def get_all_device_status():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get device statuses: {str(e)}"
         )
+
+
+@app.post("/devices/bt1500/")
+async def add_bt1500_device(
+    device_id: str = Form(..., description="Unique device identifier"),
+    port: str = Form(..., description="Serial port (e.g., COM1, /dev/ttyUSB0)"),
+    baudrate: int = Form(9600, description="Baud rate (default: 9600)")
+):
+    """Add a BT-1500 Sensacore analyzer device"""
+    try:
+        success = await device_manager.add_bt1500_device(device_id, port, baudrate)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": f"BT-1500 device {device_id} added successfully",
+                "device_id": device_id,
+                "port": port,
+                "baudrate": baudrate
+            }
+        else:
+            raise HTTPException(status_code=400, detail=f"Failed to add BT-1500 device {device_id}")
+            
+    except Exception as e:
+        logger.error(f"Error adding BT-1500 device: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@app.delete("/devices/bt1500/{device_id}")
+async def remove_bt1500_device(device_id: str):
+    """Remove a BT-1500 device"""
+    try:
+        await device_manager.remove_bt1500_device(device_id)
+        
+        return {
+            "status": "success",
+            "message": f"BT-1500 device {device_id} removed successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error removing BT-1500 device: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@app.get("/devices/bt1500/")
+async def get_bt1500_devices():
+    """Get status of all BT-1500 devices"""
+    try:
+        devices = device_manager.get_bt1500_devices()
+        
+        return {
+            "status": "success",
+            "devices": devices,
+            "count": len(devices)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting BT-1500 devices: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@app.get("/devices/bt1500/{device_id}")
+async def get_bt1500_device_status(device_id: str):
+    """Get status of a specific BT-1500 device"""
+    try:
+        status = device_manager.get_bt1500_device_status(device_id)
+        
+        if status:
+            return {
+                "status": "success",
+                "device_id": device_id,
+                "device_status": status
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"BT-1500 device {device_id} not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting BT-1500 device status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@app.post("/devices/bt1500/{device_id}/command")
+async def send_bt1500_command(
+    device_id: str,
+    command: str = Form(..., description="Command to send to BT-1500")
+):
+    """Send a command to a BT-1500 device"""
+    try:
+        # Get device handler
+        devices = bt1500_manager.devices
+        if device_id not in devices:
+            raise HTTPException(status_code=404, detail=f"BT-1500 device {device_id} not found")
+        
+        handler = devices[device_id]
+        success = await handler.send_command(command)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": f"Command sent to BT-1500 device {device_id}",
+                "command": command
+            }
+        else:
+            raise HTTPException(status_code=400, detail=f"Failed to send command to BT-1500 device {device_id}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending command to BT-1500: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@app.get("/devices/bt1500/{device_id}/buffer")
+async def get_bt1500_buffer(device_id: str):
+    """Get current buffer content from a BT-1500 device (for debugging)"""
+    try:
+        devices = bt1500_manager.devices
+        if device_id not in devices:
+            raise HTTPException(status_code=404, detail=f"BT-1500 device {device_id} not found")
+        
+        handler = devices[device_id]
+        buffer_content = handler.get_buffer_content()
+        
+        return {
+            "status": "success",
+            "device_id": device_id,
+            "buffer_content": buffer_content,
+            "buffer_size": len(buffer_content)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting BT-1500 buffer: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 # Exception handlers
